@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package alibros.co.uk.sunshinewear;
+package com.example.android.sunshine.app;
 
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -32,12 +32,24 @@ import android.os.Message;
 import android.support.wearable.watchface.CanvasWatchFaceService;
 import android.support.wearable.watchface.WatchFaceStyle;
 import android.text.format.Time;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.SurfaceHolder;
 import android.view.View;
 import android.view.WindowInsets;
 import android.widget.FrameLayout;
 import android.widget.TextView;
+
+import com.google.android.gms.common.ConnectionResult;
+import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.wearable.Asset;
+import com.google.android.gms.wearable.DataApi;
+import com.google.android.gms.wearable.DataEvent;
+import com.google.android.gms.wearable.DataEventBuffer;
+import com.google.android.gms.wearable.DataItem;
+import com.google.android.gms.wearable.DataMap;
+import com.google.android.gms.wearable.DataMapItem;
+import com.google.android.gms.wearable.Wearable;
 
 import java.lang.ref.WeakReference;
 import java.text.DateFormat;
@@ -51,7 +63,8 @@ import java.util.concurrent.TimeUnit;
  * Digital watch face with seconds. In ambient mode, the seconds aren't displayed. On devices with
  * low-bit ambient mode, the text is drawn without anti-aliasing in ambient mode.
  */
-public class SunshineWatchFace extends CanvasWatchFaceService {
+public class SunshineWatchFace extends CanvasWatchFaceService implements DataApi.DataListener,
+        GoogleApiClient.ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener  {
 
 
     /**
@@ -72,15 +85,27 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
     private LayoutInflater mInflater;
 
 
+    private int mHigh = 0,mLow = 0;
+    GoogleApiClient mGoogleApiClient;
+
+
     @Override
     public Engine onCreateEngine() {
         mInflater = (LayoutInflater) this.getSystemService(Context.LAYOUT_INFLATER_SERVICE);
+        mGoogleApiClient = new GoogleApiClient.Builder(SunshineWatchFace.this)
+                .addConnectionCallbacks(this)
+                .addOnConnectionFailedListener(this)
+                .addApi(Wearable.API)
+                .build();
+        mGoogleApiClient.connect();
         return new Engine();
 
     }
 
+
     private class Engine extends CanvasWatchFaceService.Engine {
         final Handler mUpdateTimeHandler = new EngineHandler(this);
+
 
 
 
@@ -112,10 +137,11 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
          */
         boolean mLowBitAmbient;
 
+
         @Override
         public void onCreate(SurfaceHolder holder) {
             super.onCreate(holder);
-
+            Log.i("SUNSHINE","Created");
             mFrameLayout = (FrameLayout) mInflater.inflate(R.layout.watch_face, null);
 
 
@@ -229,12 +255,13 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
             mFrameLayout.layout(0, 0, bounds.width(), bounds.height());
             mDate = Calendar.getInstance().getTime();
 
+
             ((TextView) mFrameLayout.findViewById(R.id.time)).setText(time);
             ((TextView)mFrameLayout.findViewById(R.id.date)).setText(mDateFormat.format(mDate));
-            ((TextView)mFrameLayout.findViewById(R.id.high)).setText("22");
-            ((TextView)mFrameLayout.findViewById(R.id.low)).setText("21");
+            ((TextView)mFrameLayout.findViewById(R.id.high)).setText(""+mHigh);
+            ((TextView)mFrameLayout.findViewById(R.id.low)).setText(""+mLow);
 
-            mFrameLayout.setBackgroundColor(mAmbient? BACKGROUND_COLOR_AMBIENT : BACKGROUND_COLOR);
+            mFrameLayout.setBackgroundColor(mAmbient ? BACKGROUND_COLOR_AMBIENT : BACKGROUND_COLOR);
 
             mFrameLayout.draw(canvas);
 
@@ -271,6 +298,8 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
                 mUpdateTimeHandler.sendEmptyMessageDelayed(MSG_UPDATE_TIME, delayMs);
             }
         }
+
+
     }
 
     private static class EngineHandler extends Handler {
@@ -292,4 +321,45 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
             }
         }
     }
+
+    @Override
+    public void onConnected(Bundle bundle) {
+        Wearable.DataApi.addListener(mGoogleApiClient, this);
+        Log.i("SUNSHINE","CONNECTED");
+    }
+
+    @Override
+    public void onConnectionSuspended(int i) {
+
+    }
+
+    @Override
+    public void onDataChanged(DataEventBuffer dataEvents) {
+        for (DataEvent dataEvent : dataEvents) {
+            if (dataEvent.getType() != DataEvent.TYPE_CHANGED) {
+                continue;
+            }
+
+            DataItem dataItem = dataEvent.getDataItem();
+            String path = dataItem.getUri().getPath();
+            if (!path.equals("/weather-data")) {
+                continue;
+            }
+
+            DataMapItem dataMapItem = DataMapItem.fromDataItem(dataItem);
+            DataMap dataMap = dataMapItem.getDataMap();
+            mHigh = dataMap.getInt("weather-high");
+            mLow = dataMap.getInt("weather-low");
+            Asset iconAsset = dataMap.getAsset("weather-icon");
+
+            Log.i("SUNSHINE","DATA CHANGED");
+        }
+
+    }
+
+    @Override
+    public void onConnectionFailed(ConnectionResult connectionResult) {
+        Log.i("SUNSHINE","DATA CHANGED");
+    }
+
 }
