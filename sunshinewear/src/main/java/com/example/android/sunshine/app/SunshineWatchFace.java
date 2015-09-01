@@ -21,6 +21,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.res.Resources;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
@@ -38,6 +40,7 @@ import android.view.SurfaceHolder;
 import android.view.View;
 import android.view.WindowInsets;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.TextView;
 
 import com.google.android.gms.common.ConnectionResult;
@@ -51,6 +54,7 @@ import com.google.android.gms.wearable.DataMap;
 import com.google.android.gms.wearable.DataMapItem;
 import com.google.android.gms.wearable.Wearable;
 
+import java.io.InputStream;
 import java.lang.ref.WeakReference;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
@@ -87,6 +91,7 @@ public class SunshineWatchFace extends CanvasWatchFaceService implements DataApi
 
     private int mHigh = 0,mLow = 0;
     GoogleApiClient mGoogleApiClient;
+    private Bitmap mBitmap;
 
 
     @Override
@@ -261,6 +266,15 @@ public class SunshineWatchFace extends CanvasWatchFaceService implements DataApi
             ((TextView)mFrameLayout.findViewById(R.id.high)).setText(""+mHigh);
             ((TextView)mFrameLayout.findViewById(R.id.low)).setText(""+mLow);
 
+            if (isInAmbientMode()){
+                ((ImageView)mFrameLayout.findViewById(R.id.image)).setVisibility(View.INVISIBLE);
+            } else {
+                ((ImageView)mFrameLayout.findViewById(R.id.image)).setVisibility(View.VISIBLE);
+                if (mBitmap != null){
+                    ((ImageView)mFrameLayout.findViewById(R.id.image)).setImageBitmap(mBitmap);
+                }
+            }
+
             mFrameLayout.setBackgroundColor(mAmbient ? BACKGROUND_COLOR_AMBIENT : BACKGROUND_COLOR);
 
             mFrameLayout.draw(canvas);
@@ -342,7 +356,7 @@ public class SunshineWatchFace extends CanvasWatchFaceService implements DataApi
 
             DataItem dataItem = dataEvent.getDataItem();
             String path = dataItem.getUri().getPath();
-            if (!path.equals("/weather-data")) {
+            if (!path.equals("/sunshine-weather-data")) {
                 continue;
             }
 
@@ -351,6 +365,8 @@ public class SunshineWatchFace extends CanvasWatchFaceService implements DataApi
             mHigh = dataMap.getInt("weather-high");
             mLow = dataMap.getInt("weather-low");
             Asset iconAsset = dataMap.getAsset("weather-icon");
+            if (iconAsset != null)
+            mBitmap = loadBitmapFromAsset(iconAsset);
 
             Log.i("SUNSHINE","DATA CHANGED");
         }
@@ -360,6 +376,28 @@ public class SunshineWatchFace extends CanvasWatchFaceService implements DataApi
     @Override
     public void onConnectionFailed(ConnectionResult connectionResult) {
         Log.i("SUNSHINE","DATA CHANGED");
+    }
+
+    public Bitmap loadBitmapFromAsset(Asset asset) {
+        if (asset == null) {
+            throw new IllegalArgumentException("Asset must be non-null");
+        }
+        ConnectionResult result =
+                mGoogleApiClient.blockingConnect(500, TimeUnit.MILLISECONDS);
+        if (!result.isSuccess()) {
+            return null;
+        }
+        // convert asset into a file descriptor and block until it's ready
+        InputStream assetInputStream = Wearable.DataApi.getFdForAsset(
+                mGoogleApiClient, asset).await().getInputStream();
+        mGoogleApiClient.disconnect();
+
+        if (assetInputStream == null) {
+            Log.w("SUNSHINE", "Requested an unknown Asset.");
+            return null;
+        }
+        // decode the stream into a bitmap
+        return BitmapFactory.decodeStream(assetInputStream);
     }
 
 }

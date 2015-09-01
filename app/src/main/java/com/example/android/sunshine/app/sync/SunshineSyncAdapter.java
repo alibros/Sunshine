@@ -38,6 +38,7 @@ import com.example.android.sunshine.app.muzei.WeatherMuzeiSource;
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.android.gms.common.api.ResultCallback;
+import com.google.android.gms.wearable.Asset;
 import com.google.android.gms.wearable.DataApi;
 import com.google.android.gms.wearable.PutDataMapRequest;
 import com.google.android.gms.wearable.PutDataRequest;
@@ -48,6 +49,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -364,6 +366,15 @@ public class SunshineSyncAdapter extends AbstractThreadedSyncAdapter {
                     PutDataMapRequest putDataMapRequest = PutDataMapRequest.create("/sunshine-weather-data");
                     putDataMapRequest.getDataMap().putInt("weather-high",(int)high);
                     putDataMapRequest.getDataMap().putInt("weather-low",(int)low);
+
+
+                    int artResourceForWeatherCondition = Utility.getArtResourceForWeatherCondition(weatherId);
+                    Bitmap bitmap = BitmapFactory.decodeResource(getContext().getResources(),artResourceForWeatherCondition);
+                    Asset asset = createAssetFromBitmap(bitmap);
+                    if (asset != null)
+                    putDataMapRequest.getDataMap().putAsset("weather-icon",asset);
+
+
                     PutDataRequest request = putDataMapRequest.asPutDataRequest();
                     Wearable.DataApi.putDataItem(mGoogleApiClient, request).setResultCallback(new ResultCallback<DataApi.DataItemResult>() {
                         @Override
@@ -402,6 +413,12 @@ public class SunshineSyncAdapter extends AbstractThreadedSyncAdapter {
             e.printStackTrace();
             setLocationStatus(getContext(), LOCATION_STATUS_SERVER_INVALID);
         }
+    }
+
+    private static Asset createAssetFromBitmap(Bitmap bitmap) {
+        final ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
+        bitmap.compress(Bitmap.CompressFormat.PNG, 100, byteStream);
+        return Asset.createFromBytes(byteStream.toByteArray());
     }
 
     private void updateWidgets() {
